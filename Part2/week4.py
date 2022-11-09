@@ -10,6 +10,7 @@ import week3 as w3
 
 from collections import defaultdict
 import numpy as np
+import pandas as pd
 
 w3.GenerateSpectrum_cyclic('NQEL')
 
@@ -26,12 +27,12 @@ def cyclopeptide_score(prot_sequence,spectrum,linear=False):
     for exp_mass in experimental_spectrum:
         experimental_spect[exp_mass] = experimental_spect[exp_mass] + 1
         
-    print(experimental_spect)
+    #print(experimental_spect)
         
     theoretical_spect = defaultdict(lambda: 0)
     for the_mass in theoretical_spectrum:
         theoretical_spect[the_mass] = theoretical_spect[the_mass] + 1
-    print(theoretical_spect)
+    #print(theoretical_spect)
     
     matches = 0
     matches2 = 0
@@ -43,10 +44,11 @@ def cyclopeptide_score(prot_sequence,spectrum,linear=False):
                 matches += theoretical_spect[the_mass]
                 matches3 += theoretical_spect[the_mass]
             else:
-                print('multiplicity?',theoretical_spect[the_mass],experimental_spect[the_mass])
+                #print('multiplicity?',theoretical_spect[the_mass],experimental_spect[the_mass])
                 matches += np.min([theoretical_spect[the_mass],experimental_spect[the_mass]])
                 #matches += theoretical_spect[the_mass]
-    return matches,matches2,matches3
+    #return matches,matches2,matches3
+    return matches
     
     """
     matches = 0
@@ -86,3 +88,185 @@ def prettyprint(x):
     print(' '.join([str(i) for i in x]))
     
 prettyprint(spectrum_convolution('0 87 97 97 103 113 128 137 137 163 184 200 224 234 240 241 260 265 276 321 327 337 337 347 362 373 378 404 424 424 460 465 474 475 484 501 521 541 561 578 587 588 597 602 638 638 658 684 689 700 715 725 725 735 741 786 797 802 821 822 828 838 862 878 899 925 925 934 949 959 965 965 975 1062'))
+
+
+#%%
+
+class keydefaultdict(defaultdict):
+    def __missing__(self, key):
+        if self.default_factory is None:
+            raise KeyError( key )
+        else:
+            ret = self[key] = self.default_factory(key)
+            return ret
+
+
+"""
+LeaderboardCyclopeptideSequencing(Spectrum, N)
+    Leaderboard ← set containing only the empty peptide
+    LeaderPeptide ← empty peptide
+    while Leaderboard is non-empty
+        Leaderboard ← Expand(Leaderboard)
+        for each Peptide in Leaderboard
+            if Mass(Peptide) = ParentMass(Spectrum)
+                if Score(Peptide, Spectrum) > Score(LeaderPeptide, Spectrum)
+                    LeaderPeptide ← Peptide
+            else if Mass(Peptide) > ParentMass(Spectrum)
+                remove Peptide from Leaderboard
+        Leaderboard ← Trim(Leaderboard, Spectrum, N)
+    output LeaderPeptide
+"""
+
+def mass_calc(peptide):
+    mass_counter = 0
+    
+    dfmass = w3.get_mass_table()
+    
+    for p in peptide:
+        mass_counter += dfmass[p]
+        
+    return mass_counter
+
+def longmass(peptide):
+    mass_string = ''
+    
+    dfmass = w3.get_mass_table()
+    
+    for p in peptide:
+        mass_string += str(dfmass[p])+'-'
+        
+    return mass_string[:-1]
+
+def ParentMass(spectrum):
+    pmass = int(spectrum.split(' ')[-1])
+    return pmass
+
+def expand(Leaderboard,par_mass,mass):
+    AAs = ['G', 'A', 'S', 'P', 'V', 'T', 'C', 'I', 'N', 'D', 'K', 'E',
+           'M', 'H', 'F', 'R', 'Y', 'W'] #, 'L','Q',
+    
+    newlist = []
+    for L in Leaderboard:
+        for a in AAs:
+            if mass[L+a] <= par_mass:
+                newlist.append(L+a)
+            
+    #print(Leaderboard)
+    #print(newlist)
+    return Leaderboard+newlist
+
+def trim(Leaderboard,Spectrum,N,scores):
+    #LinearScores = []
+    """for j in range(len(Leaderboard)):
+        peptide = Leaderboard[j]
+        #LinearScores.append( cyclopeptide_score(peptide,Spectrum,linear=True))
+        LinearScores.append( scores[peptide])"""
+    
+    LinearScores = [scores[peptide] for peptide in Leaderboard]
+    
+    dfscores = pd.Series(LinearScores,Leaderboard).sort_values(ascending=False)
+    
+    print('scores',dfscores)
+    
+    try:
+        #ans = list(dfscores[dfscores >= dfscores[N-1]].index)
+        ans = list(dfscores[dfscores > dfscores[N-1]].index)
+    except:
+        ans = list(dfscores.index)
+    
+    return ans
+
+class score_class:
+    def __init__(self, spectrum, linear):
+        self.s = spectrum
+        self.l = linear
+        
+    def score_calc(self, peptide):
+        return cyclopeptide_score(peptide,self.s,self.l)
+
+class mass_class:
+    def __init__(self):
+        
+        self.dfmass = w3.get_mass_table()
+        self.mass_dict = self.dfmass.to_dict()
+        self.mass_dict[''] = 0
+        
+    
+    def mass_calc(self, peptide):
+        
+
+        try:
+            return self.mass_dict[peptide]
+        except:
+            ans = self.dfmass[peptide[-1]] + self.mass_calc(peptide[:-1])
+            self.mass_dict[peptide] = ans
+            return ans
+        
+
+
+
+import time
+def LeaderboardCyclopeptideSequencing(Spectrum, N):
+    sc = score_class(Spectrum,True)
+    mc = mass_class()
+    mass = keydefaultdict(mass_calc)
+    scores = keydefaultdict(sc.score_calc)
+    
+    Leaderboard = ['']
+    LeaderPeptide = ''
+    
+    par_mass = ParentMass(Spectrum)
+    
+    while len(Leaderboard) != 0:
+        #print('Leader')
+        #print(Leaderboard)
+        Leaderboard = expand(Leaderboard,par_mass,mass)
+        for peptide in Leaderboard:
+            
+            #print(peptide)
+            #time.sleep(.1)
+            
+            if mc.mass_calc(peptide) == par_mass:
+                if cyclopeptide_score(peptide,Spectrum,linear=True) > cyclopeptide_score(LeaderPeptide,Spectrum,linear=True):
+                    LeaderPeptide = peptide
+            """
+            elif mass[peptide] > ParentMass(Spectrum):
+                #remove peptide from leaderboard
+                #print('remove',peptide)
+                Leaderboard.remove(peptide) # may be slow
+            else:
+                print('dont remove',peptide)
+                """
+               
+        Leaderboard = [peptide for peptide in Leaderboard if mc.mass_calc(peptide) <= par_mass]
+        print('Leaderpeptide',LeaderPeptide)
+        lb = len(Leaderboard)
+        print('len before',lb)
+        Leaderboard = trim(Leaderboard,Spectrum,N,scores)
+        la = len(Leaderboard)
+        print('len after',la)
+        if (lb == la) & (mc.mass_calc(LeaderPeptide) == par_mass):
+            break
+        print('Leaderboard',Leaderboard)
+    return LeaderPeptide
+
+
+LeaderboardCyclopeptideSequencing('0 71 113 129 147 200 218 260 313 331 347 389 460', 10)
+#stringy = """0 71 71 71 87 97 97 99 101 103 113 113 114 115 128 128 129 137 147 163 163 170 184 184 186 186 190 211 215 226 226 229 231 238 241 244 246 257 257 276 277 278 299 300 312 316 317 318 318 323 328 340 343 344 347 349 356 366 370 373 374 391 401 414 414 415 419 427 427 431 437 441 446 453 462 462 462 470 472 502 503 503 511 515 529 530 533 533 540 543 547 556 559 569 574 575 584 590 600 600 604 612 616 617 630 640 640 643 646 648 660 671 683 684 687 693 703 703 719 719 719 729 730 731 737 740 741 745 747 754 774 780 784 790 797 800 806 818 826 827 832 833 838 846 846 847 850 868 869 877 884 889 893 897 903 908 913 917 930 940 947 956 960 960 961 964 965 966 983 983 985 1002 1009 1010 1011 1021 1031 1031 1036 1053 1054 1058 1059 1062 1063 1074 1076 1084 1092 1103 1113 1122 1124 1130 1133 1134 1145 1146 1146 1149 1150 1155 1156 1171 1173 1174 1187 1191 1193 1200 1212 1221 1233 1240 1242 1246 1259 1260 1262 1277 1278 1283 1284 1287 1287 1288 1299 1300 1303 1309 1311 1320 1330 1341 1349 1357 1359 1370 1371 1374 1375 1379 1380 1397 1402 1402 1412 1422 1423 1424 1431 1448 1450 1450 1467 1468 1469 1472 1473 1473 1477 1486 1493 1503 1516 1520 1525 1530 1536 1540 1544 1549 1556 1564 1565 1583 1586 1587 1587 1595 1600 1601 1606 1607 1615 1627 1633 1636 1643 1649 1653 1659 1679 1686 1688 1692 1693 1696 1702 1703 1704 1714 1714 1714 1730 1730 1740 1746 1749 1750 1762 1773 1785 1787 1790 1793 1793 1803 1816 1817 1821 1829 1833 1833 1843 1849 1858 1859 1864 1877 1886 1890 1893 1900 1900 1903 1904 1918 1922 1930 1930 1931 1961 1963 1971 1971 1971 1980 1987 1992 1996 2002 2006 2006 2014 2018 2019 2019 2032 2042 2059 2060 2063 2067 2077 2084 2086 2089 2090 2093 2105 2110 2115 2115 2116 2117 2121 2133 2134 2155 2156 2157 2176 2176 2187 2189 2192 2195 2202 2204 2207 2207 2218 2222 2243 2247 2247 2249 2249 2263 2270 2270 2286 2296 2304 2305 2305 2318 2319 2320 2320 2330 2332 2334 2336 2336 2346 2362 2362 2362 2433"""
+#ans = LeaderboardCyclopeptideSequencing(stringy, 325)
+#print(longmass(ans))
+
+stringy = """0 71 71 87 97 99 99 101 101 103 113 115 128 128 129 131 147 156 163 170 184 186 186 196 198 199 218 229 230 230 234 256 257 259 262 266 271 276 283 285 285 297 317 327 327 331 347 349 356 356 357 358 365 374 379 382 385 404 416 418 422 426 427 428 428 446 450 459 469 480 483 484 486 503 505 513 513 521 527 535 537 540 549 551 555 556 557 587 600 606 608 612 612 614 614 632 636 650 650 655 658 666 668 683 684 684 701 703 705 713 713 721 735 739 743 743 747 755 765 771 783 784 796 797 806 820 822 830 831 841 842 844 844 848 854 862 868 884 891 897 902 913 921 925 931 934 941 943 955 959 962 963 967 969 972 977 1006 1014 1015 1018 1024 1026 1040 1040 1040 1054 1059 1060 1062 1077 1078 1086 1088 1090 1092 1100 1111 1119 1121 1127 1139 1153 1163 1171 1185 1187 1187 1189 1193 1201 1205 1206 1210 1218 1222 1224 1224 1226 1240 1248 1258 1272 1284 1290 1292 1300 1311 1319 1321 1323 1325 1333 1334 1349 1351 1352 1357 1371 1371 1371 1385 1387 1393 1396 1397 1405 1434 1439 1442 1444 1448 1449 1452 1456 1468 1470 1477 1480 1486 1490 1498 1509 1514 1520 1527 1543 1549 1557 1563 1567 1567 1569 1570 1580 1581 1589 1591 1605 1614 1615 1627 1628 1640 1646 1656 1664 1668 1668 1672 1676 1690 1698 1698 1706 1708 1710 1727 1727 1728 1743 1745 1753 1756 1761 1761 1775 1779 1797 1797 1799 1799 1803 1805 1811 1824 1854 1855 1856 1860 1862 1871 1874 1876 1884 1890 1898 1898 1906 1908 1925 1927 1928 1931 1942 1952 1961 1965 1983 1983 1984 1985 1989 1993 1995 2007 2026 2029 2032 2037 2046 2053 2054 2055 2055 2062 2064 2080 2084 2084 2094 2114 2126 2126 2128 2135 2140 2145 2149 2152 2154 2155 2177 2181 2181 2182 2193 2212 2213 2215 2225 2225 2241 2248 2255 2264 2280 2282 2283 2283 2296 2298 2308 2310 2310 2312 2312 2314 2324 2340 2340 2411"""
+ans = LeaderboardCyclopeptideSequencing(stringy, 156)
+print(longmass(ans))
+
+
+
+
+
+
+
+
+
+
+

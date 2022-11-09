@@ -250,7 +250,7 @@ def get_mass_table():
                       sep=' ',index_col=0,header=0).squeeze("columns")
     return dfmass
 
-def linear_spectrum(peptide):
+def linear_spectrum(peptide,dfmass):
     """PrefixMass(0) ← 0
     for i ← 1 to |Peptide|
         for every symbol s in Alphabet
@@ -262,7 +262,7 @@ def linear_spectrum(peptide):
             add PrefixMass(j) − PrefixMass(i) to LinearSpectrum
     return sorted list LinearSpectrum
     """
-    dfmass = get_mass_table()
+    
     prefix_mass = [0]
     alphabet = dfmass.index
     
@@ -270,14 +270,14 @@ def linear_spectrum(peptide):
         for s in alphabet:
             if s == peptide[i]:
                 prefix_mass.append(prefix_mass[-1] + dfmass[s])
-    print(prefix_mass)
-    linear_spectrum = [0]    
+    #print(prefix_mass)
+    linear_spectrum_ans = [0]    
     for i in range(len(peptide)):
         for j in range(i+1,len(peptide)+1):
-            linear_spectrum.append(prefix_mass[j] - prefix_mass[i])
+            linear_spectrum_ans.append(prefix_mass[j] - prefix_mass[i])
 
     
-    return np.sort(linear_spectrum)
+    return np.sort(linear_spectrum_ans)
 
 def cyclic_spectrum(peptide):
     """PrefixMass(0) ← 0
@@ -302,7 +302,7 @@ def cyclic_spectrum(peptide):
         for s in alphabet:
             if s == peptide[i]:
                 prefix_mass.append(prefix_mass[-1] + dfmass[s])
-    print(prefix_mass)
+    #print(prefix_mass)
     linear_spectrum = [0]    
     for i in range(len(peptide)):
         for j in range(i+1,len(peptide)+1):

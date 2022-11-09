@@ -202,6 +202,23 @@ inputstring = """19 19
 gomanhatten(inputstring)
 
 
+#%%
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
